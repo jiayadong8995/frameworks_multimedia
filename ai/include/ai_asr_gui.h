@@ -34,11 +34,6 @@
 /****************************************************************************
  * Public Types
  ****************************************************************************/
-#define SCREEN_WIDTH    (lv_obj_get_width(lv_scr_act()))
-#define SCREEN_HEIGHT   (lv_obj_get_height(lv_scr_act()))
-
-#define DEMO_WIDTH (int32_t)((SCREEN_HEIGHT * 0.95f))
-#define DEMO_HEIGHT (int32_t)(DEMO_WIDTH)
 
 typedef enum asr_status_e
 {
@@ -49,12 +44,18 @@ typedef enum asr_status_e
     ASR_STATUS_XXXX
 }asr_status_t;
 
+typedef enum asr_handle_type_e
+{
+    ASR_HANDLE_TYPE_NONE = 0,
+    ASR_HANDLE_TYPE_STARTED,
+    ASR_HANDLE_TYPE_FINISHED,
+    ASR_HANDLE_TYPE_XXXX
+}asr_handle_type_t;
+
 typedef struct asr_ope_s {
-    int id;
     void* handle;
-    void* extra;
-    int handle_type;
-} asr_ope_t;
+    asr_handle_type_t handle_type;
+}asr_ope_t;
 
 typedef struct asr_thread_s
 {
@@ -62,20 +63,20 @@ typedef struct asr_thread_s
     pthread_t* ai_uvloop_tid;
 
     uv_loop_t* asrloop;
-    uv_async_queue_t* asyncq;
+    uv_async_queue_t asyncq;
     uv_timer_t timer;
 
     asr_ope_t asr_ope;
-
 }asr_thread_t;
 
 typedef struct ai_gui_s
 {
-    asr_status_t status; // Status of the audio text processing
-    const char *asr_result_text; // Pointer to the ASR result text
+    asr_status_t status;
+    const char *asr_result_text;
 
     uv_loop_t ui_loop;
 
+    asr_ope_t asr_ope;
     struct
     {
         lv_obj_t *root;

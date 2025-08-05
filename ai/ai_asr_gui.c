@@ -22,9 +22,11 @@
  * Included Files
  ****************************************************************************/
 
+#include <assert.h>
 #include <nuttx/config.h>
 #include <nuttx/userspace.h>
 #include <pthread.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <uv.h>
 
@@ -34,12 +36,18 @@
 #include "ai_common.h"
 #include "ai_asr_gui.h"
 #include "ai_tool.h"
+#include "include/ai_asr.h"
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
-ai_gui_t g_ai_gui;
+#define SCREEN_WIDTH    (lv_obj_get_width(lv_scr_act()))
+#define SCREEN_HEIGHT   (lv_obj_get_height(lv_scr_act()))
 
-static lv_timer_t *press_timer = NULL; // Define the timer pointer
+#define DEMO_WIDTH (int32_t)((SCREEN_HEIGHT * 0.95f))
+#define DEMO_HEIGHT (int32_t)(DEMO_WIDTH)
+
+ai_gui_t g_ai_gui;
 
 extern const lv_image_dsc_t mic;
 
@@ -66,23 +74,9 @@ static void lv_nuttx_uv_loop(uv_loop_t* loop, lv_nuttx_result_t* result)
     lv_nuttx_uv_deinit(&data);
 }
 
-// Timer callback function that is executed repeatedly during key presses
 static void press_timer_cb(lv_timer_t *timer)
 {
-    // pthread_mutex_lock(&asr_result_mutex);
-    // const char* asr_result_text = global_asr_result.result;
-    // pthread_mutex_unlock(&asr_result_mutex);
-
-    // if (asr_result_text != NULL) {
-    //     AI_INFO("ASR result text: %s, length: %zu\n", asr_result_text, strlen(asr_result_text));
-    //     fflush(stdout);
-    //     lv_textarea_set_text(g_ai_gui.ui.textarea, asr_result_text);
-    //     AI_INFO("lv_textarea_set_text\n");
-    // } else {
-    //     lv_textarea_set_text(g_ai_gui.ui.textarea, "No ASR result available");
-    // }
-
-    // aitool_cmd_start_exec(&aitool, 0);
+    return;
 }
 
 static void key_press_cb(lv_event_t* e)
@@ -92,9 +86,6 @@ static void key_press_cb(lv_event_t* e)
         return;
     }
 
-    if (press_timer == NULL) {
-        press_timer = lv_timer_create(press_timer_cb, 30, NULL);
-    }
 }
 
 static void key_release_cb(lv_event_t* e)
@@ -104,22 +95,6 @@ static void key_release_cb(lv_event_t* e)
         return;
     }
 
-    // Locking to protect global variables
-    // pthread_mutex_lock(&asr_result_mutex);
-    // const char* asr_result_text = global_asr_result.result;
-    // pthread_mutex_unlock(&asr_result_mutex);
-
-    // if(NULL == asr_result_text){
-    //     asr_result_text = "No ASR result available";
-    // }
-
-    // lv_textarea_set_text(g_ai_gui.ui.textarea, asr_result_text);
-    // aitool_cmd_finish_exec(&aitool, 0);
-
-    if(press_timer != NULL){
-        lv_timer_del(press_timer);
-        press_timer = NULL;
-    }
 }
 
 static void clear_text_cb(lv_event_t* e)
@@ -213,13 +188,68 @@ static void ui_create(void)
     lv_obj_add_event_cb(g_ai_gui.ui.voice_btntnm, key_release_cb, \
                                                 LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(g_ai_gui.ui.clear_btnm, clear_text_cb, \
-                                                LV_EVENT_CLICKED, NULL); 
+                                                LV_EVENT_CLICKED, NULL);
+    
+    lv_timer_create(press_timer_cb, 30, NULL);
+}
+
+static int ai_asr_engine_init(void* arg)
+{
+    asr_init_params_t param;
+    ai_gui_t* ai_gui = (ai_gui_t*)arg;
+
+    param.loop = &ai_gui->ui_loop;
+    param.silence_timeout = 3000; // Set silence timeout to 3 seconds
+    ai_gui->asr_ope.handle = ai_asr_create_engine(&param);
+    if (ai_gui->asr_ope.handle == NULL) {
+        AI_ERR("Failed to create ASR engine\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+static void ai_asr_async_cb(uv_async_queue_t* asyncq, void* data)
+{
+    asr_thread_t* asr_thread = asyncq->data;
+    if (asr_thread->asr_ope.handle_type == ASR_HANDLE_TYPE_STARTED) {
+    } else if (asr_thread->asr_ope.handle_type == ASR_HANDLE_TYPE_FINISHED) {
+    } else {
+        AI_ERR("Unknown asr handle type: %d\n", asr_thread->asr_ope.handle_type);
+    }
+    return;
 }
 
 static void* ai_uvloop_thread(void* arg)
 {
+    asr_thread_t* asr_thread = (asr_thread_t*)arg;
+    uv_loop_t* loop = asr_thread->asrloop;
+    int ret;
 
-    return NULL;
+    ret = uv_loop_init(loop);
+    if (ret < 0) {
+        AI_ERR("Failed to initialize UV loop: %d\n", ret);
+        return NULL;
+    }
+
+    asr_thread->asyncq.data = asr_thread;
+    ret = uv_async_queue_init(loop, &asr_thread->asyncq, ai_asr_async_cb);
+
+    if (ret < 0) {
+        AI_ERR("Failed to initialize UV async queue: %d\n", ret);
+        uv_loop_close(loop);
+        uv_async_queue_close(&asr_thread->asyncq, NULL);
+        return NULL;
+    }
+
+    ret = uv_run(asr_thread->asrloop, UV_RUN_DEFAULT);
+    if (ret < 0) {
+        AI_ERR("Failed to run UV loop: %d\n", ret);
+        uv_loop_close(loop);
+        uv_async_queue_close(&asr_thread->asyncq, NULL);
+        return NULL;
+    }
+
 }
 
 /****************************************************************************
@@ -227,13 +257,8 @@ static void* ai_uvloop_thread(void* arg)
  ****************************************************************************/
 int main(int argc, FAR char* argv[])
 {
-    asr_thread_t asr_thread;
-    memset(&asr_thread, 0, sizeof(asr_thread_t));
-    pthread_attr_init(asr_thread.attr);
-    pthread_attr_setdetachstate(asr_thread.attr, 16384);
-    pthread_create(asr_thread.ai_uvloop_tid, asr_thread.attr,\
-                    ai_uvloop_thread, NULL);
-
+    ai_asr_engine_init(&g_ai_gui);
+    
     // init lvgl
     lv_nuttx_dsc_t info;
     lv_nuttx_result_t result;
