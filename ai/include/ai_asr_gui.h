@@ -17,8 +17,8 @@
  * under the License.
  *
  ****************************************************************************/
-#ifndef __AI_LVGL_H
-#define __AI_LVGL_H
+#ifndef __AI_ASR_GUI_H
+#define __AI_ASR_GUI_H
 /****************************************************************************
  * Included Files
  ****************************************************************************/
@@ -27,56 +27,19 @@
 #include <unistd.h>
 #include <uv.h>
 #include <uv_async_queue.h>
-
-// include lvgl headers
 #include <lvgl/lvgl.h>
+
+#include "ai_asr_internal.h"
+#include "ai_asr.h"
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
 
-typedef enum asr_status_e
-{
-    ASR_STATUS_IDLE = 0,
-    ASR_STATUS_PROCESSING,
-    ASR_STATUS_FINISHED,
-    ASR_STATUS_ERROR,
-    ASR_STATUS_XXXX
-}asr_status_t;
-
-typedef enum asr_handle_type_e
-{
-    ASR_HANDLE_TYPE_NONE = 0,
-    ASR_HANDLE_TYPE_STARTED,
-    ASR_HANDLE_TYPE_FINISHED,
-    ASR_HANDLE_TYPE_XXXX
-}asr_handle_type_t;
-
-typedef struct asr_ope_s {
-    void* handle;
-    asr_handle_type_t handle_type;
-}asr_ope_t;
-
-typedef struct asr_thread_s
-{
-    pthread_attr_t* attr;
-    pthread_t* ai_uvloop_tid;
-
-    uv_loop_t* asrloop;
-    uv_async_queue_t asyncq;
-    uv_timer_t timer;
-
-    asr_ope_t asr_ope;
-}asr_thread_t;
-
 typedef struct ai_gui_s
 {
-    asr_status_t status;
-    const char *asr_result_text;
-
     uv_loop_t ui_loop;
-
-    asr_ope_t asr_ope;
+    void* handle;
     struct
     {
         lv_obj_t *root;
@@ -91,10 +54,10 @@ typedef struct ai_gui_s
 
 }ai_gui_t;
 
-
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
+// asr_handle_t ai_asr_create_engine(const asr_init_params_t* param);
 
-#endif // __AI_LVGL_H
+#endif // __AI_ASR_GUI_H
