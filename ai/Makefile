@@ -49,6 +49,14 @@ ifneq ($(CONFIG_AI_ASR_GUI),)
   CSRCS += $(wildcard fonts/*.c)
 endif
 
+ifneq ($(CONFIG_AI_CONVERSATION_GUI),)
+  MAINSRC   += ai_conversation_gui.c
+  PROGNAME  += ai_conversation_gui
+  PRIORITY  += $(CONFIG_AI_CONVERSATION_GUI_PRIORITY)
+  STACKSIZE += $(CONFIG_AI_CONVERSATION_GUI_STACKSIZE)
+  CSRCS += $(wildcard fonts/*.c)
+endif
+
 ifneq ($(CONFIG_AI_MODULE),)
 CSRCS += $(wildcard src/asr/*.c)
 CSRCS += $(wildcard src/tts/*.c)

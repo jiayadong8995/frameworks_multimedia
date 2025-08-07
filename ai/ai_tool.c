@@ -146,6 +146,11 @@ static void aitool_asr_callback(asr_event_t event, const asr_result_t* result, v
 {
     aitool_t* aitool = (aitool_t*)cookie;
     int64_t end;
+    
+    if (!aitool) {
+        printf("aitool_asr_callback: invalid cookie\n");
+        return;
+    }
 
     if (event == asr_event_result) {
         if (aitool->asr_cost == 0) {
@@ -211,25 +216,51 @@ static void aitool_conv_callback(conversation_event_t event, const conversation_
 {
     aitool_t* aitool = (aitool_t*)cookie;
 
-    if (event == conversation_event_response_audio) {
-        printf("Conversation response audio: %d\n", result->len);
-    } else if (event == conversation_event_response_text) {
-        printf("Conversation response text: %s\n", result->result);
-    } else if (event == conversation_event_input_text) {
-        printf("Conversation input text: %s\n", result->result);
-    } else if (event == conversation_event_complete) {
-        printf("Conversation complete\n");
-    } else if (event == conversation_event_error) {
-        printf("Conversation error: %d\n", result->error_code);
-    } else if (event == conversation_event_start) {
-        printf("Conversation start\n");
-    } else if (event == conversation_event_stop) {
-        printf("Conversation stop\n");
-    } else {
-        printf("Unknown event: %d\n", event);
+    if (!aitool) {
+        printf("aitool_conv_callback: invalid cookie\n");
+        return;
     }
 
-    printf("Conversation aitool:%p\n", aitool);
+    switch (event) {
+        case conversation_event_start:
+            printf("🎯 Conversation started - ready to listen\n");
+            break;
+            
+        case conversation_event_input_text:
+            if (result && result->result) {
+                printf("🎤 You said: %s\n", result->result);
+            }
+            break;
+            
+        case conversation_event_response_text:
+            if (result && result->result) {
+                printf("🤖 AI replied: %s\n", result->result);
+            }
+            break;
+            
+        case conversation_event_response_audio:
+            if (result && result->len > 0) {
+                printf("🔊 AI audio response: %d bytes\n", result->len);
+                // 这里可以播放音频数据
+            }
+            break;
+            
+        case conversation_event_complete:
+            printf("✅ Conversation completed successfully\n");
+            break;
+            
+        case conversation_event_error:
+            printf("❌ Conversation error: %d\n", result ? result->error_code : -1);
+            break;
+            
+        case conversation_event_stop:
+            printf("⏹️ Conversation stopped\n");
+            break;
+            
+        default:
+            printf("❓ Unknown conversation event: %d\n", event);
+            break;
+    }
 }
 
 /****************************************************************************
@@ -319,7 +350,7 @@ CMD0(create_conv_engine)
 
 CMD1(start, int, id)
 {
-    asr_handle_t handle;
+    void* handle;
     int ret = -EINVAL;
 
     printf("Start ID before0:%d\n", id);
@@ -335,11 +366,13 @@ CMD1(start, int, id)
 
     if (aitool->chain[id].handle_type == AITOOL_ASR) {
         aitool->asr_start_time = aitool_gettime_relative();
-        ret = ai_asr_start(handle, NULL);
+        ret = ai_asr_start((asr_handle_t)handle, NULL);
+        printf("🎤 Started ASR recording...\n");
     } else if (aitool->chain[id].handle_type == AITOOL_CONVERSATION) {
-        ret = ai_conversation_start(handle, NULL);
+        ret = ai_conversation_start((conversation_handle_t)handle, NULL);
+        printf("🎯 Started conversation - speak now!\n");
     } else {
-        printf("Unknown hanle type!");
+        printf("❌ Unknown handle type!\n");
     }
 
     printf("Start ID:%d\n", id);
@@ -382,14 +415,18 @@ CMD1(finish, int, id)
     if (!handle)
         return -1;
 
-    if (aitool->chain[id].handle_type == AITOOL_ASR)
-        ret = ai_asr_finish(handle);
-    else if (aitool->chain[id].handle_type == AITOOL_CONVERSATION)
-        ret = ai_conversation_finish(handle);
-    else if (aitool->chain[id].handle_type == AITOOL_TTS)
-        ret = ai_tts_stop(handle);
-    else
-        printf("Unknown hanle type!");
+    if (aitool->chain[id].handle_type == AITOOL_ASR) {
+        ret = ai_asr_finish((asr_handle_t)handle);
+        printf("🎤 Stopped ASR recording\n");
+    } else if (aitool->chain[id].handle_type == AITOOL_CONVERSATION) {
+        ret = ai_conversation_finish((conversation_handle_t)handle);
+        printf("🎯 Stopped listening - processing your request...\n");
+    } else if (aitool->chain[id].handle_type == AITOOL_TTS) {
+        ret = ai_tts_stop((tts_handle_t)handle);
+        printf("🔊 Stopped TTS playback\n");
+    } else {
+        printf("❌ Unknown handle type!\n");
+    }
 
     aitool->asr_cost = 0;
     aitool->asr_first_work_cost = 0;
@@ -502,8 +539,25 @@ static int aitool_cmd_help(const aitool_cmd_t cmds[])
 {
     int i;
 
+    printf("\n=== AI Tool Commands ===\n");
     for (i = 0; cmds[i].cmd; i++)
         printf("%-16s %s\n", cmds[i].cmd, cmds[i].help);
+
+    printf("\n=== Conversation Usage Example ===\n");
+    printf("1. ccreate          # Create conversation engine\n");
+    printf("2. start 0          # Start listening (speak now!)\n");
+    printf("3. finish 0         # Stop listening, get AI response\n");
+    printf("4. close 0          # Close conversation engine\n");
+    printf("\n=== ASR Usage Example ===\n");
+    printf("1. acreate          # Create ASR engine\n");
+    printf("2. start 0          # Start speech recognition\n");
+    printf("3. finish 0         # Stop speech recognition\n");
+    printf("4. close 0          # Close ASR engine\n");
+    printf("\n=== TTS Usage Example ===\n");
+    printf("1. tcreate          # Create TTS engine\n");
+    printf("2. speak 0 \"Hello\"  # Speak text\n");
+    printf("3. close 0          # Close TTS engine\n");
+    printf("\n");
 
     return 0;
 }

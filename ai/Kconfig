@@ -13,13 +13,21 @@ config AI_XIAOAI_ENGINE
 	bool "AI xiaoai engine"
 	default n
 
-config AI_ASR_GUI
-	bool "AI asr gui"
-	default n
-
 config AI_TOOL
 	bool "AI tool"
 	default n
+
+choice
+	prompt "AI gui"
+	default AI_ASR_GUI
+
+config AI_CONVERSATION_GUI
+	bool "AI conversation gui"
+
+config AI_ASR_GUI
+	bool "AI asr gui"
+
+endchoice
 
 choice
 	prompt "AI log level"
@@ -57,14 +65,25 @@ endif # AI_TOOL
 if AI_ASR_GUI
 
 config AI_ASR_GUI_STACKSIZE
-	int "AI lvgl stack size"
+	int "AI ASR GUI stack size"
 	default 65535
 
 config AI_ASR_GUI_PRIORITY
-	int "AI lvgl priority"
+	int "AI ASR GUI priority"
 	default 100
 
 endif # if AI_ASR_GUI
 
+if AI_CONVERSATION_GUI
+
+config AI_CONVERSATION_GUI_STACKSIZE
+	int "AI conversation GUI stack size"
+	default 32768
+
+config AI_CONVERSATION_GUI_PRIORITY
+	int "AI conversation GUI priority"
+	default 100
+
+endif # if AI_CONVERSATION_GUI
 
 endif # AI_MODULE

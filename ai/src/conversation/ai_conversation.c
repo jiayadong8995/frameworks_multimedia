@@ -593,7 +593,6 @@ static void media_recorder_prepare_connect_cb(void* cookie, int ret, void* obj)
     conversation_context_t* ctx = cookie;
 
     if (ret < 0) {
-        AI_INFO("conversation recorder prepare connect cb error:%d\n", ret);
         return;
     }
 
@@ -606,58 +605,29 @@ static void media_recorder_open_cb(void* cookie, int ret)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-
-    if (ret < 0) {
-        AI_INFO("conversation recorder open cb error:%d", ret);
-    }
-    AI_INFO("conversation recorder open cb:%d", ret);
+    UNUSED(ret);
 }
 
 static void media_recorder_start_cb(void* cookie, int ret)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-
-    if (ret < 0) {
-        AI_INFO("conversation recorder start cb error:%d", ret);
-    }
-    AI_INFO("conversation recorder start cb:%d", ret);
+    UNUSED(ret);
 }
 
 static void media_recorder_close_cb(void* cookie, int ret)
 {
-    AI_INFO("conversation recorder close cb:%d", ret);
+    UNUSED(cookie);
+    UNUSED(ret);
 }
 
 static void media_recorder_event_callback(void* cookie, int event, int ret, const char* extra)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-
-    if (ret < 0) {
-        AI_INFO("conversation recorder event error:%d", ret);
-    }
-
-    switch (event) {
-    case MEDIA_EVENT_NOP:
-        break;
-    case MEDIA_EVENT_PREPARED:
-        break;
-    case MEDIA_EVENT_STARTED:
-        break;
-    case MEDIA_EVENT_PAUSED:
-        break;
-    case MEDIA_EVENT_STOPPED:
-        break;
-    case MEDIA_EVENT_COMPLETED:
-        break;
-    case MEDIA_EVENT_SEEKED:
-        break;
-    default:
-        return;
-    }
-
-    AI_INFO("conversation recorder event callback event:%d ret:%d", event, ret);
+    UNUSED(event);
+    UNUSED(ret);
+    UNUSED(extra);
 }
 
 static void media_player_prepare_connect_cb(void* cookie, int ret, void* obj)
@@ -868,13 +838,16 @@ static int ai_conversation_map_params(conversation_context_t* ctx, const convers
         return -EINVAL;
     }
 
+    // 映射基本参数
     out_param->loop = in_param->loop;
     out_param->api_key = in_param->api_key;
     out_param->auto_next_round = in_param->auto_next_round;
 
+    // 设置回调和opaque数据
     out_param->cb = conversation_async_cb;
     out_param->opaque = ctx;
 
+    // 参数验证
     if (!out_param->loop) {
         AI_INFO("UV loop is required for conversation engine");
         return -EINVAL;
@@ -889,6 +862,7 @@ static int ai_conversation_play_audio(conversation_context_t* ctx, const void* d
         return -EINVAL;
     }
 
+    // 将音频数据加入缓冲区
     if (ai_ring_buffer_is_full(&ctx->buffer)) {
         AI_INFO("Audio buffer full, dropping data");
         return -ENOSPC;
@@ -896,6 +870,7 @@ static int ai_conversation_play_audio(conversation_context_t* ctx, const void* d
 
     ai_ring_buffer_queue_arr(&ctx->buffer, (const char*)data, length);
 
+    // 如果当前没有写操作在进行，启动写操作
     if (ai_ring_buffer_num_items(&ctx->buffer) > 0 && !ctx->write_req.data) {
         size_t available = ai_ring_buffer_num_items(&ctx->buffer);
         size_t to_write = available > 4096 ? 4096 : available;
