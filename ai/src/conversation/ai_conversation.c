@@ -593,6 +593,7 @@ static void media_recorder_prepare_connect_cb(void* cookie, int ret, void* obj)
     conversation_context_t* ctx = cookie;
 
     if (ret < 0) {
+        AI_INFO("conversation recorder prepare connect cb error:%d\n", ret);
         return;
     }
 
@@ -605,29 +606,58 @@ static void media_recorder_open_cb(void* cookie, int ret)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-    UNUSED(ret);
+
+    if (ret < 0) {
+        AI_INFO("conversation recorder open cb error:%d", ret);
+    }
+    AI_INFO("conversation recorder open cb:%d", ret);
 }
 
 static void media_recorder_start_cb(void* cookie, int ret)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-    UNUSED(ret);
+
+    if (ret < 0) {
+        AI_INFO("conversation recorder start cb error:%d", ret);
+    }
+    AI_INFO("conversation recorder start cb:%d", ret);
 }
 
 static void media_recorder_close_cb(void* cookie, int ret)
 {
-    UNUSED(cookie);
-    UNUSED(ret);
+    AI_INFO("conversation recorder close cb:%d", ret);
 }
 
 static void media_recorder_event_callback(void* cookie, int event, int ret, const char* extra)
 {
     conversation_context_t* ctx = cookie;
     UNUSED(ctx);
-    UNUSED(event);
-    UNUSED(ret);
-    UNUSED(extra);
+
+    if (ret < 0) {
+        AI_INFO("conversation recorder event error:%d", ret);
+    }
+
+    switch (event) {
+    case MEDIA_EVENT_NOP:
+        break;
+    case MEDIA_EVENT_PREPARED:
+        break;
+    case MEDIA_EVENT_STARTED:
+        break;
+    case MEDIA_EVENT_PAUSED:
+        break;
+    case MEDIA_EVENT_STOPPED:
+        break;
+    case MEDIA_EVENT_COMPLETED:
+        break;
+    case MEDIA_EVENT_SEEKED:
+        break;
+    default:
+        return;
+    }
+
+    AI_INFO("conversation recorder event callback event:%d ret:%d", event, ret);
 }
 
 static void media_player_prepare_connect_cb(void* cookie, int ret, void* obj)

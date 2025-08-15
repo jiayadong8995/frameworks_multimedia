@@ -80,7 +80,6 @@ typedef struct volc_conversation_engine {
     bool is_finished;  // 用户音频输入是否结束
     bool is_closed;    // 整个连接是否关闭
     bool is_running;
-    bool is_listening; // 是否正在监听用户输入
 
     // Thread and event loop
     pthread_t thread;
@@ -246,6 +245,7 @@ static int volc_conversation_websocket_callback(struct lws* wsi, enum lws_callba
                 memcpy(message, in, len);
                 message[len] = '\0';
 
+                AI_INFO("Received: %.*s", (int)len, message);
                 volc_conversation_process_server_message(engine, message);
                 free(message);
             }
@@ -274,14 +274,12 @@ static int volc_conversation_websocket_callback(struct lws* wsi, enum lws_callba
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-            if (engine) {
-                AI_INFO("WebSocket connection error: %s", in ? (char*)in : "Unknown error");
-                engine->state = VOLC_STATE_ERROR;
-                const char *result = in ? (char*)in : "Connection error";
-                volc_conversation_send_event(engine, conversation_engine_event_error,
-                                           result, strlen(result),
-                                           conversation_engine_error_network);
-            }
+        AI_INFO("WebSocket connection error: %s", in ? (char*)in : "Unknown error");
+            engine->state = VOLC_STATE_ERROR;
+            const char *result = in ? (char*)in : "Connection error";
+            volc_conversation_send_event(engine, conversation_engine_event_error,
+                                       result, strlen(result),
+                                       conversation_engine_error_network);
             break;
 
         case LWS_CALLBACK_CLIENT_CLOSED:
@@ -352,6 +350,12 @@ static int volc_conversation_send_json_message(volc_conversation_engine_t* engin
 
     const char* json_string = json_object_to_json_string(json_obj);
     size_t json_len = strlen(json_string);
+
+    if (json_len > 1024)
+        // AI_INFO("Sending: %d", json_len);
+        ;
+    else
+        AI_INFO("Sending: %s", json_string);
 
     if (ai_ring_buffer_is_full(&engine->send_buffer)) {
         AI_INFO("Send buffer full, clearing space");
@@ -460,12 +464,10 @@ static int volc_conversation_process_server_message(volc_conversation_engine_t* 
 
         // 一轮对话完成或取消，重置状态
         engine->state = VOLC_STATE_SESSION_CREATED;
-        engine->is_listening = false; // 停止监听，等待下一次start
 
         // 根据配置决定是否自动准备下一轮
         if (engine->config.auto_next_round) {
             engine->is_finished = false;  // 自动重置音频输入标志，准备下一轮
-            engine->is_listening = true;  // 自动开始监听
             AI_INFO("Auto next round enabled - ready for immediate input");
         } else {
             // 保持is_finished=true，需要手动调用start来开始下一轮
@@ -490,35 +492,14 @@ static int volc_conversation_process_server_message(volc_conversation_engine_t* 
     } else if (strcmp(type, "error") == 0) {
         json_object* error_obj;
         const char* error_message = "Unknown error";
-        const char* error_code = "unknown";
-        
         if (json_object_object_get_ex(json, "error", &error_obj)) {
             json_object* message_obj;
-            json_object* code_obj;
-            
             if (json_object_object_get_ex(error_obj, "message", &message_obj)) {
                 error_message = json_object_get_string(message_obj);
             }
-            if (json_object_object_get_ex(error_obj, "code", &code_obj)) {
-                error_code = json_object_get_string(code_obj);
-            }
         }
 
-        AI_INFO("Server error: code=%s, message=%s", error_code, error_message);
-        
-        // 根据错误类型决定是否重置状态
-        if (strcmp(error_code, "invalid_event") == 0 || 
-            strcmp(error_code, "invalid_request") == 0) {
-            // 对于协议错误，尝试重置到可用状态
-            if (engine->state == VOLC_STATE_PROCESSING || 
-                engine->state == VOLC_STATE_LISTENING) {
-                engine->state = VOLC_STATE_SESSION_CREATED;
-                AI_INFO("Reset state to SESSION_CREATED after protocol error");
-            }
-        } else {
-            engine->state = VOLC_STATE_ERROR;
-        }
-        
+        engine->state = VOLC_STATE_ERROR;
         volc_conversation_send_event(engine, conversation_engine_event_error,
                                    error_message, strlen(error_message), conversation_engine_error_server);
     }
@@ -628,9 +609,6 @@ static int volc_conversation_init(void* engine, const conversation_engine_init_p
     // 复制配置
     memcpy(&volc_engine->config, param, sizeof(conversation_engine_init_params_t));
 
-    // 设置默认配置
-    volc_engine->config.auto_next_round = false; // 默认不自动下一轮，需要手动start
-
     // 设置认证信息
     volc_engine->api_key = param->api_key ? strdup(param->api_key) : strdup(VOLC_API_KEY);
 
@@ -643,8 +621,7 @@ static int volc_conversation_init(void* engine, const conversation_engine_init_p
 
     // 设置环境参数
     volc_engine->env.loop = param->loop;
-    // 使用更兼容的音频格式，避免录制器初始化失败
-    volc_engine->env.format = "format=s16le:sample_rate=16000:channels=1";
+    volc_engine->env.format = "format=s16le:sample_rate=16000:ch_layout=mono";
     volc_engine->env.force_format = 1;
 
     volc_engine->state = VOLC_STATE_DISCONNECTED;
@@ -653,7 +630,6 @@ static int volc_conversation_init(void* engine, const conversation_engine_init_p
     volc_engine->is_finished = false;
     volc_engine->is_closed = false;
     volc_engine->is_running = false;
-    volc_engine->is_listening = false;
 
     // 初始化async queue相关
     volc_engine->uvasyncq_cb = param->cb;
@@ -744,14 +720,12 @@ static int volc_conversation_start(void* engine, const conversation_engine_audio
 
     // 重置音频输入标志，开始新一轮对话
     volc_engine->is_finished = false;
-    volc_engine->is_listening = true;
     AI_INFO("Audio input enabled for new conversation round");
 
     // 确保WebSocket连接可用 (复用已有连接或创建新连接)
     int ret = volc_conversation_connect_websocket(volc_engine);
     if (ret < 0) {
         AI_INFO("Failed to ensure WebSocket connection");
-        volc_engine->is_listening = false;
         return ret;
     }
 
@@ -821,8 +795,6 @@ static int volc_conversation_connect_websocket(volc_conversation_engine_t* volc_
     return 0;
 }
 
-
-
 static int volc_conversation_write_audio(void* engine, const char* data, int len)
 {
     volc_conversation_engine_t* volc_engine = (volc_conversation_engine_t*)engine;
@@ -831,8 +803,8 @@ static int volc_conversation_write_audio(void* engine, const char* data, int len
         return -EINVAL;
     }
 
-    // 如果不在监听状态或连接已关闭，不再处理新的音频数据
-    if (!volc_engine->is_listening || volc_engine->is_closed) {
+    // 如果音频输入已完成或连接已关闭，不再处理新的音频数据
+    if (volc_engine->is_finished || volc_engine->is_closed) {
         return 0;
     }
 
@@ -842,28 +814,9 @@ static int volc_conversation_write_audio(void* engine, const char* data, int len
         return 0;
     }
 
-    // 控制音频发送频率，避免发送过多数据
-    static int audio_count = 0;
-    static struct timespec last_send_time = {0, 0};
-    struct timespec current_time;
-    clock_gettime(CLOCK_MONOTONIC, &current_time);
-    
-    // 每100ms最多发送一次音频数据
-    if (last_send_time.tv_sec > 0) {
-        long time_diff_ms = (current_time.tv_sec - last_send_time.tv_sec) * 1000 + 
-                           (current_time.tv_nsec - last_send_time.tv_nsec) / 1000000;
-        if (time_diff_ms < 100) {
-            return 0; // 跳过这次发送
-        }
-    }
-    
-    last_send_time = current_time;
-    audio_count++;
-    
     // Base64编码音频数据
     char* audio_b64 = base64_encode((const unsigned char*)data, len);
     if (!audio_b64) {
-        AI_INFO("Failed to base64 encode audio data");
         return -ENOMEM;
     }
 
@@ -879,6 +832,7 @@ static int volc_conversation_write_audio(void* engine, const char* data, int len
 
     if (ret == 0 && volc_engine->state == VOLC_STATE_SESSION_CREATED) {
         volc_engine->state = VOLC_STATE_LISTENING;
+        AI_INFO("State changed to LISTENING, ready for continuous audio");
     }
 
     return ret;
@@ -892,13 +846,7 @@ static int volc_conversation_finish(void* engine)
         return -EINVAL;
     }
 
-    // 检查是否正在监听
-    if (!volc_engine->is_listening) {
-        return -EINVAL;
-    }
-
-    // 停止监听用户输入
-    volc_engine->is_listening = false;
+    // 设置音频输入完成标志（但保持连接以接收服务端响应）
     volc_engine->is_finished = true;
     volc_engine->state = VOLC_STATE_PROCESSING;
 
@@ -913,9 +861,6 @@ static int volc_conversation_finish(void* engine)
         return ret;
     }
 
-    // 等待一小段时间确保commit消息被处理
-    usleep(100000); // 100ms
-
     // 请求响应 - 使用正确的协议格式
     json_object* json = json_object_new_object();
     json_object_object_add(json, "type", json_object_new_string("response.create"));
@@ -928,8 +873,6 @@ static int volc_conversation_finish(void* engine)
 
     ret = volc_conversation_send_json_message(volc_engine, json);
     json_object_put(json);
-
-
 
     return ret;
 }
@@ -950,7 +893,7 @@ static int volc_conversation_cancel(void* engine)
     int ret = volc_conversation_send_json_message(volc_engine, json);
     json_object_put(json);
 
-
+    AI_INFO("Cancel: sent response.cancel, waiting for server response.done with cancelled status");
 
     return ret;
 }

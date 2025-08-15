@@ -38,8 +38,8 @@ void* conversation_plugin_init(conversation_engine_plugin_t* plugin,
         ret = plugin->init(priv_ctx, param);
         if (ret < 0) {
             AI_ERR("AI plugin:%s init failed: %d", plugin->name, ret);
-            free(priv_ctx);
-            priv_ctx = NULL;
+            // free(priv_ctx);
+            // priv_ctx = NULL;
             return NULL;
         }
     }
