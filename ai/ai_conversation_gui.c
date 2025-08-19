@@ -23,8 +23,7 @@
  ****************************************************************************/
 
 #include <ai_conversation.h>
-#include "ai_common.h"
-#include "utils/ai_common.h"
+#include <ai_common.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <uv.h>
@@ -43,6 +42,7 @@ typedef struct conver_gui_s
 {
     uv_loop_t ui_loop;
     void* handle;
+    bool conversation_active;
     struct
     {
         lv_obj_t *root;
@@ -82,26 +82,39 @@ static void lv_nuttx_uv_loop(uv_loop_t* loop, lv_nuttx_result_t* result)
 
 static void key_press_cb(lv_event_t* e)
 {
+    int ret = 0;
     conver_gui_t* ai_gui = (conver_gui_t*)lv_event_get_user_data(e);
     if(ai_gui == NULL) {
         return;
     }
-    AI_INFO("Key Pressed: Starting conversation");
-    ai_conversation_start(ai_gui->handle, NULL);
-    lv_label_set_text(ai_gui->ui.status_label, "Listening...");
-    lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x3498DB), 0);
-}
 
-static void key_release_cb(lv_event_t* e)
-{
-    conver_gui_t* ai_gui = (conver_gui_t*)lv_event_get_user_data(e);
-    if(ai_gui == NULL) {
-        return;
+    if (ai_gui->conversation_active) {
+        AI_INFO("Conversation active, finishing conversation");
+        ret = ai_conversation_finish(ai_gui->handle);
+        if (ret == 0) {
+            ai_gui->conversation_active = false;  // 更新状态标志
+            lv_label_set_text(ai_gui->ui.status_label, "Processing...");
+            lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xF39C12), 0);
+            AI_INFO("Successfully finished conversation");
+        } else {
+            AI_INFO("Failed to finish conversation: %d", ret);
+            lv_label_set_text(ai_gui->ui.status_label, "Finish Failed");
+            lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xE74C3C), 0);
+        }
+    } else {
+        AI_INFO("Starting new conversation");
+        ret = ai_conversation_start(ai_gui->handle, NULL);
+        if (ret == 0) {
+            ai_gui->conversation_active = true;   // 更新状态标志
+            lv_label_set_text(ai_gui->ui.status_label, "Listening...");
+            lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x3498DB), 0);
+            AI_INFO("Successfully started conversation");
+        } else {
+            AI_INFO("Failed to start conversation: %d", ret);
+            lv_label_set_text(ai_gui->ui.status_label, "Start Failed");
+            lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xE74C3C), 0);
+        }
     }
-    AI_INFO("Key Released: Ending conversation");
-    ai_conversation_finish(ai_gui->handle);
-    lv_label_set_text(ai_gui->ui.status_label, "Processing...");
-    lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xF39C12), 0);
 }
 
 static void clear_text_cb(lv_event_t* e)
@@ -122,11 +135,13 @@ static void ui_create(conver_gui_t* arg)
         return;
     }
     conver_gui_t* ai_gui = arg;
-
-    LV_FONT_DECLARE(lv_font_siyuan_16);
+    //TODO: 字体需要优化 
+    // 1. 字体资源（上实际开发板后优化）
+    // 2. 字体大小（上实际开发板后优化）
     LV_IMG_DECLARE(mic);
 
-    ai_gui->ui.textarea_font = &lv_font_siyuan_16;
+    ai_gui->ui.textarea_font = lv_freetype_font_create("/data/res/fonts/MiSans-Normal.ttf",\
+                     LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16, LV_FREETYPE_FONT_STYLE_NORMAL);
 
     if (ai_gui->ui.textarea_font == NULL) {
         LV_LOG_ERROR("Failed to create text area font\n");
@@ -215,15 +230,14 @@ static void ui_create(conver_gui_t* arg)
 
     // Add event callbacks
     lv_obj_add_event_cb(ai_gui->ui.voice_btntnm, key_press_cb, \
-                                                LV_EVENT_PRESSED, ai_gui);
-    lv_obj_add_event_cb(ai_gui->ui.voice_btntnm, key_release_cb, \
-                                                LV_EVENT_RELEASED, ai_gui);
+                                                LV_EVENT_CLICKED, ai_gui);
     lv_obj_add_event_cb(ai_gui->ui.clear_btnm, clear_text_cb, \
                                                 LV_EVENT_CLICKED, ai_gui);
 
 }
 
-static void ai_conv_callback(conversation_event_t event, const conversation_result_t* result, void* cookie)
+static void ai_conv_callback(conversation_event_t event, \
+                            const conversation_result_t* result, void* cookie)
 {
     conver_gui_t* ai_gui = (conver_gui_t*)cookie;
 
@@ -235,6 +249,8 @@ static void ai_conv_callback(conversation_event_t event, const conversation_resu
     case conversation_event_start:
         lv_label_set_text(ai_gui->ui.status_label, "Conversation Started");
         lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x27AE60), 0);
+        ai_gui->conversation_active = true;  // 同步状态标志
+        AI_INFO("Conversation started - ready to listen");
         break;
 
     case conversation_event_input_text:
@@ -242,6 +258,7 @@ static void ai_conv_callback(conversation_event_t event, const conversation_resu
             lv_textarea_set_text(ai_gui->ui.textarea, result->result);
             lv_label_set_text(ai_gui->ui.status_label, "You said:");
             lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x2C3E50), 0);
+            AI_INFO("User input received: %s", result->result);
         }
         break;
         
@@ -252,6 +269,7 @@ static void ai_conv_callback(conversation_event_t event, const conversation_resu
             lv_textarea_set_text(ai_gui->ui.textarea, buffer);
             lv_label_set_text(ai_gui->ui.status_label, "AI Responding");
             lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x9B59B6), 0);
+            AI_INFO("AI response received: %s", result->result);
         }
         break;
         
@@ -259,17 +277,21 @@ static void ai_conv_callback(conversation_event_t event, const conversation_resu
         if (result && result->len > 0) {
             lv_label_set_text(ai_gui->ui.status_label, "Playing AI Response");
             lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xE67E22), 0);
+            AI_INFO("AI audio response received: %d bytes", result->len);
         }
         break;
         
     case conversation_event_complete:
-        lv_label_set_text(ai_gui->ui.status_label, "Conversation Complete");
+        lv_label_set_text(ai_gui->ui.status_label, "Conversation Complete - Click to Start New");
         lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x27AE60), 0);
+        ai_gui->conversation_active = false;  // 同步状态标志
+        AI_INFO("Conversation completed successfully - ready for next round");
         break;
         
     case conversation_event_error:
-        lv_label_set_text(ai_gui->ui.status_label, "Conversation Error");
+        lv_label_set_text(ai_gui->ui.status_label, "Conversation Error - Click to Retry");
         lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0xE74C3C), 0);
+        ai_gui->conversation_active = false;  // 同步状态标志
         if (result) {
             char buffer[256];
             snprintf(buffer, sizeof(buffer), "Error: %d", result->error_code);
@@ -279,11 +301,14 @@ static void ai_conv_callback(conversation_event_t event, const conversation_resu
         break;
         
     case conversation_event_stop:
-        lv_label_set_text(ai_gui->ui.status_label, "Conversation Stopped");
+        lv_label_set_text(ai_gui->ui.status_label, "Conversation Stopped - Click to Start New");
         lv_obj_set_style_text_color(ai_gui->ui.status_label, lv_color_hex(0x95A5A6), 0);
+        ai_gui->conversation_active = false;  // 同步状态标志
+        AI_INFO("Conversation stopped - ready for next round");
         break;
         
     default:
+        AI_INFO("Unknown conversation event: %d", event);
         break;
     }
 }
@@ -332,6 +357,9 @@ int main(int argc, FAR char* argv[])
     }
 
     uv_loop_init(&ai_gui.ui_loop);
+    
+    // 初始化对话状态
+    ai_gui.conversation_active = false;
 
     ui_create(&ai_gui);
     ai_conversation_engine_init(&ai_gui);
