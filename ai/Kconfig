@@ -21,6 +21,9 @@ choice
 	prompt "AI gui"
 	default AI_ASR_GUI
 
+config RTC_CONVERSATION_GUI
+	bool "RTC conversation gui"
+
 config AI_CONVERSATION_GUI
 	bool "AI conversation gui"
 
@@ -85,5 +88,17 @@ config AI_CONVERSATION_GUI_PRIORITY
 	default 100
 
 endif # if AI_CONVERSATION_GUI
+
+if RTC_CONVERSATION_GUI
+
+config RTC_CONVERSATION_GUI_STACKSIZE
+	int "AI conversation GUI stack size"
+	default 32768
+
+config RTC_CONVERSATION_GUI_PRIORITY
+	int "AI conversation GUI priority"
+	default 100
+
+endif # if RTC_CONVERSATION_GUI
 
 endif # AI_MODULE
