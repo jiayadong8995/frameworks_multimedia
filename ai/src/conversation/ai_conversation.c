@@ -640,18 +640,22 @@ static void media_recorder_event_callback(void* cookie, int event, int ret, cons
 
     switch (event) {
     case MEDIA_EVENT_NOP:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_NOP]");
         break;
     case MEDIA_EVENT_PREPARED:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_PREPARED]");
         break;
     case MEDIA_EVENT_STARTED:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_STARTED]");
         break;
     case MEDIA_EVENT_PAUSED:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_PAUSED]");
         break;
     case MEDIA_EVENT_STOPPED:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_STOPPED]");
         break;
     case MEDIA_EVENT_COMPLETED:
-        break;
-    case MEDIA_EVENT_SEEKED:
+        AI_INFO("conversation recorder evert callback: [MEDIA_EVENT_COMPLETED]");
         break;
     default:
         return;
@@ -1070,6 +1074,8 @@ int ai_conversation_start(conversation_handle_t handle,
     message->message_handler = conversation_message_start_handler;
     message->message_data = data;
 
+    AI_INFO("conversation event = [ai_conversation_start]\n");
+
     return uv_async_queue_send(ctx->asyncq, message);
 }
 
@@ -1101,6 +1107,8 @@ int ai_conversation_finish(conversation_handle_t handle)
     message->message_id = CONVERSATION_MESSAGE_FINISH;
     message->message_handler = conversation_message_finish_handler;
     message->message_data = data;
+
+    AI_INFO("conversation event = [ai_conversation_finish]\n");
 
     return uv_async_queue_send(ctx->asyncq, message);
 }

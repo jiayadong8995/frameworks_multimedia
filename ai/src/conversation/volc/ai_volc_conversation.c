@@ -144,7 +144,8 @@ static struct lws_protocols volc_conversation_protocols[] = {
 static int volc_conversation_websocket_callback(struct lws* wsi, enum lws_callback_reasons reason,
                                                void* user, void* in, size_t len)
 {
-    volc_conversation_engine_t* engine = (volc_conversation_engine_t*)lws_context_user(lws_get_context(wsi));
+    volc_conversation_engine_t* engine = \
+                            (volc_conversation_engine_t*)lws_context_user(lws_get_context(wsi));
     int ret;
 
     if (!engine) {
@@ -152,186 +153,198 @@ static int volc_conversation_websocket_callback(struct lws* wsi, enum lws_callba
         return -1;
     }
 
-    // 详细的回调原因映射
-    const char* reason_name = NULL;
-    switch (reason) {
-        case LWS_CALLBACK_WSI_CREATE: reason_name = "WSI_CREATE"; break;
-        case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH: reason_name = "FILTER_PRE_ESTABLISH"; break;
-        case LWS_CALLBACK_CLIENT_HTTP_BIND_PROTOCOL: reason_name = "HTTP_BIND_PROTOCOL"; break;
-        case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER: reason_name = "APPEND_HANDSHAKE_HEADER"; break;
-        case LWS_CALLBACK_CLIENT_ESTABLISHED: reason_name = "CLIENT_ESTABLISHED"; break;
-        case LWS_CALLBACK_CLIENT_RECEIVE: reason_name = "CLIENT_RECEIVE"; break;
-        case LWS_CALLBACK_CLIENT_WRITEABLE: reason_name = "CLIENT_WRITEABLE"; break;
-        case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: reason_name = "CONNECTION_ERROR"; break;
-        case LWS_CALLBACK_CLIENT_CLOSED: reason_name = "CLIENT_CLOSED"; break;
-        case LWS_CALLBACK_WSI_DESTROY: reason_name = "WSI_DESTROY"; break;
-        case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_CLIENT_VERIFY_CERTS: reason_name = "SSL_LOAD_CERTS"; break;
-        case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION: reason_name = "SSL_CERT_VERIFY"; break;
-        case LWS_CALLBACK_SERVER_NEW_CLIENT_INSTANTIATED: reason_name = "SERVER_NEW_CLIENT_INSTANTIATED"; break;
-        case LWS_CALLBACK_CONNECTING: reason_name = "CONNECTING"; break;
-        case LWS_CALLBACK_PROTOCOL_INIT: reason_name = "PROTOCOL_INIT"; break;
-        case LWS_CALLBACK_PROTOCOL_DESTROY: reason_name = "PROTOCOL_DESTROY"; break;
-        case LWS_CALLBACK_HTTP: reason_name = "HTTP"; break;
-        case LWS_CALLBACK_HTTP_BODY: reason_name = "HTTP_BODY"; break;
-        case LWS_CALLBACK_HTTP_WRITEABLE: reason_name = "HTTP_WRITEABLE"; break;
-        case LWS_CALLBACK_ADD_HEADERS: reason_name = "ADD_HEADERS"; break;
-        case LWS_CALLBACK_CLIENT_HTTP_REDIRECT: reason_name = "HTTP_REDIRECT"; break;
-        case LWS_CALLBACK_EVENT_WAIT_CANCELLED: reason_name = "EVENT_WAIT_CANCELLED"; break;
-        default: reason_name = "UNKNOWN"; break;
-    }
-
-    // AI_INFO("websocket_callback reason: %d (%s), len: %zu", reason, reason_name, len);
+    AI_INFO("websocket_callback reason: %d, len: %zu", reason, len);
 
     switch (reason) {
-        case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
-            AI_INFO("conversation_volc Pre-establish filter");
-            break;
+    case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
+        AI_INFO("conversation_volc Pre-establish filter");
+        break;
 
-        case LWS_CALLBACK_WSI_CREATE:
-            AI_INFO("conversation_volc WSI created");
-            break;
+    case LWS_CALLBACK_WSI_CREATE:
+        AI_INFO("conversation_volc WSI created");
+        break;
 
-        case LWS_CALLBACK_CLIENT_HTTP_BIND_PROTOCOL:
-            AI_INFO("conversation_volc HTTP bind protocol");
-            break;
+    case LWS_CALLBACK_CLIENT_HTTP_BIND_PROTOCOL:
+        AI_INFO("conversation_volc HTTP bind protocol");
+        break;
 
-        case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
-            {
-                AI_INFO("conversation_volc Add header\n");
-                unsigned char** headers = (unsigned char**)in;
-                unsigned char* end = (*headers) + len;
+    case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+        {
+            AI_INFO("conversation_volc Add header\n");
+            unsigned char** headers = (unsigned char**)in;
+            unsigned char* end = (*headers) + len;
 
-                // Add necessary headers for authentication
-                char auth_header[128];
-                snprintf(auth_header, sizeof(auth_header), "Bearer %s", engine->api_key);
+            // Add necessary headers for authentication
+            char auth_header[128];
+            snprintf(auth_header, sizeof(auth_header), "Bearer %s", engine->api_key);
 
-                AI_INFO("Adding Authorization header: Bearer %.*s...", 10, engine->api_key);
+            AI_INFO("Adding Authorization header: Bearer %.*s...", 10, engine->api_key);
 
-                ret = lws_add_http_header_by_name(wsi, (unsigned char*)"Authorization:",
-                                                (unsigned char*)auth_header,
-                                                strlen(auth_header),
-                                                headers, end);
-                if (ret < 0)
-                    AI_INFO("Add Authorization token failed\n");
+            ret = lws_add_http_header_by_name(wsi, (unsigned char*)"Authorization:",
+                                            (unsigned char*)auth_header,
+                                            strlen(auth_header),
+                                            headers, end);
+            if (ret < 0)
+                AI_INFO("Add Authorization token failed\n");
 
-                // Add User-Agent header
-                ret = lws_add_http_header_by_name(wsi,
-                    (unsigned char*)"User-Agent:",
-                    (unsigned char*)"curl/7.81.0",
-                    strlen("curl/7.81.0"),
-                    headers, end);
-                if (ret < 0)
-                    AI_INFO("Add User-Agent failed\n");
+            // Add User-Agent header
+            ret = lws_add_http_header_by_name(wsi,
+                (unsigned char*)"User-Agent:",
+                (unsigned char*)"curl/7.81.0",
+                strlen("curl/7.81.0"),
+                headers, end);
+            if (ret < 0)
+                AI_INFO("Add User-Agent failed\n");
 
-                // Add Accept header
-                ret = lws_add_http_header_by_name(wsi,
-                    (unsigned char*)"Accept:",
-                    (unsigned char*)"*/*",
-                    strlen("*/*"),
-                    headers, end);
-                if (ret < 0)
-                    AI_INFO("Add Accept failed\n");
-            }
-            break;
+            // Add Accept header
+            ret = lws_add_http_header_by_name(wsi,
+                (unsigned char*)"Accept:",
+                (unsigned char*)"*/*",
+                strlen("*/*"),
+                headers, end);
+            if (ret < 0)
+                AI_INFO("Add Accept failed\n");
+        }
+        break;
 
-        case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            AI_INFO("conversation_volc Connected to server: %s\n", VOLC_URL);
-            engine->state = VOLC_STATE_CONNECTED;
-            break;
+    case LWS_CALLBACK_CLIENT_ESTABLISHED:
+        AI_INFO("conversation_volc Connected to server: %s\n", VOLC_URL);
+        engine->state = VOLC_STATE_CONNECTED;
+        break;
 
-        case LWS_CALLBACK_CLIENT_RECEIVE:
-            if (len > 0) {
-                char* message = malloc(len + 1);
-                memcpy(message, in, len);
-                message[len] = '\0';
-
+    case LWS_CALLBACK_CLIENT_RECEIVE:
+        AI_INFO("conversation_volc Received message: %.*s", (int)len, (char*)in);
+        if (len > 0) {
+            char* message = malloc(len + 1);
+            memcpy(message, in, len);
+            message[len] = '\0';
+            if(len < 300)
                 AI_INFO("Received: %.*s", (int)len, message);
-                volc_conversation_process_server_message(engine, message);
-                free(message);
-            }
-            break;
+            volc_conversation_process_server_message(engine, message);
+            free(message);
+        }
+        break;
 
-        case LWS_CALLBACK_CLIENT_WRITEABLE:
-            if (ai_ring_buffer_num_items(&engine->send_buffer) > 0) {
-                size_t available = ai_ring_buffer_num_items(&engine->send_buffer);
-                        size_t to_send = available > VOLC_BUFFER_MAX_SIZE - LWS_PRE ?
-                        VOLC_BUFFER_MAX_SIZE - LWS_PRE : available;
-
-                unsigned char* buffer = malloc(to_send + LWS_PRE);
-                ai_ring_buffer_dequeue_arr(&engine->send_buffer, (char*)(buffer + LWS_PRE), to_send);
-
-                int written = lws_write(wsi, buffer + LWS_PRE, to_send, LWS_WRITE_TEXT);
-                free(buffer);
-
-                if (written < 0) {
-                    return -1;
+    case LWS_CALLBACK_CLIENT_WRITEABLE:
+        AI_INFO("conversation_volc WebSocket writable");
+        if (ai_ring_buffer_num_items(&engine->send_buffer) > 0) {
+            // 查找完整的消息（以换行符结尾）
+            size_t available = ai_ring_buffer_num_items(&engine->send_buffer);
+            size_t message_end = 0;
+            bool found_complete_message = false;
+            
+            // 在缓冲区中查找换行符，确定消息边界
+            for (size_t i = 0; i < available && i < VOLC_BUFFER_MAX_SIZE - LWS_PRE; i++) {
+                char temp_char;
+                if (ai_ring_buffer_peek(&engine->send_buffer, &temp_char, i) == 1) {
+                    if (temp_char == '\n') {
+                        message_end = i + 1;
+                        found_complete_message = true;
+                        break;
+                    }
                 }
-
-                if (ai_ring_buffer_num_items(&engine->send_buffer) > 0) {
+            }
+            
+            if (found_complete_message && message_end > 0) {
+                // 发送完整的消息（包含换行符）
+                unsigned char* buffer = malloc(message_end + LWS_PRE);
+                if (buffer) {
+                    ai_ring_buffer_dequeue_arr(&engine->send_buffer, (char*)(buffer + LWS_PRE), message_end);
+                    
+                    // 使用LWS_WRITE_TEXT确保每个消息都是独立的WebSocket帧
+                    int written = lws_write(wsi, buffer + LWS_PRE, message_end, LWS_WRITE_TEXT);
+                    free(buffer);
+                    
+                    if (written < 0) {
+                        return -1;
+                    }
+                    
+                    // 如果还有更多消息，继续请求写入回调
+                    if (ai_ring_buffer_num_items(&engine->send_buffer) > 0) {
+                        lws_callback_on_writable(wsi);
+                    }
+                }
+            } else if (available >= VOLC_BUFFER_MAX_SIZE - LWS_PRE) {
+                // 如果缓冲区满了但没有找到完整消息，强制发送部分数据
+                size_t to_send = VOLC_BUFFER_MAX_SIZE - LWS_PRE;
+                unsigned char* buffer = malloc(to_send + LWS_PRE);
+                if (buffer) {
+                    ai_ring_buffer_dequeue_arr(&engine->send_buffer, (char*)(buffer + LWS_PRE), to_send);
+                    
+                    int written = lws_write(wsi, buffer + LWS_PRE, to_send, LWS_WRITE_TEXT);
+                    free(buffer);
+                    
+                    if (written < 0) {
+                        return -1;
+                    }
+                    
+                    // 继续请求写入回调
                     lws_callback_on_writable(wsi);
                 }
             }
-            break;
+        }
+        break;
 
-        case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+    case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
         AI_INFO("WebSocket connection error: %s", in ? (char*)in : "Unknown error");
-            engine->state = VOLC_STATE_ERROR;
-            const char *result = in ? (char*)in : "Connection error";
-            volc_conversation_send_event(engine, conversation_engine_event_error,
-                                       result, strlen(result),
-                                       conversation_engine_error_network);
-            break;
+        engine->state = VOLC_STATE_ERROR;
+        const char *result = in ? (char*)in : "Connection error";
+        volc_conversation_send_event(engine, conversation_engine_event_error,
+                                    result, strlen(result),
+                                    conversation_engine_error_network);
+        break;
 
-        case LWS_CALLBACK_CLIENT_CLOSED:
-            AI_INFO("WebSocket connection closed");
-            engine->wsi = NULL;
-            engine->state = VOLC_STATE_DISCONNECTED;
-                    volc_conversation_send_event(engine, conversation_engine_event_stop,
-                                     NULL, 0, conversation_engine_error_success);
-            break;
+    case LWS_CALLBACK_CLIENT_CLOSED:
+        AI_INFO("WebSocket connection closed");
+        engine->wsi = NULL;
+        engine->state = VOLC_STATE_DISCONNECTED;
+                volc_conversation_send_event(engine, conversation_engine_event_stop,
+                                    NULL, 0, conversation_engine_error_success);
+        break;
 
-        case LWS_CALLBACK_WSI_DESTROY:
-            engine->wsi = NULL;
-            break;
+    case LWS_CALLBACK_WSI_DESTROY:
+        AI_INFO("WebSocket connection destroyed");
+        engine->wsi = NULL;
+        break;
 
-        case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_CLIENT_VERIFY_CERTS:
-            AI_INFO("conversation_volc Loading SSL certs");
-            break;
+    case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_CLIENT_VERIFY_CERTS:
+        AI_INFO("conversation_volc Loading SSL certs");
+        break;
 
-        case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION:
-            AI_INFO("conversation_volc SSL cert verification");
-            break;
+    case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION:
+        AI_INFO("conversation_volc SSL cert verification");
+        break;
 
-        case LWS_CALLBACK_CLIENT_HTTP_WRITEABLE:
-            AI_INFO("conversation_volc HTTP writeable");
-            break;
+    case LWS_CALLBACK_CLIENT_HTTP_WRITEABLE:
+        AI_INFO("conversation_volc HTTP writeable");
+        break;
 
-        case LWS_CALLBACK_CLIENT_HTTP_REDIRECT:
-            AI_INFO("conversation_volc HTTP redirect");
-            break;
+    case LWS_CALLBACK_CLIENT_HTTP_REDIRECT:
+        AI_INFO("conversation_volc HTTP redirect");
+        break;
 
-        case LWS_CALLBACK_OPENSSL_PERFORM_SERVER_CERT_VERIFICATION:
-            AI_INFO("conversation_volc SSL server cert verification");
-            return 0;  // 跳过证书验证
+    case LWS_CALLBACK_OPENSSL_PERFORM_SERVER_CERT_VERIFICATION:
+        AI_INFO("conversation_volc SSL server cert verification");
+        return 0;
 
-        case LWS_CALLBACK_OPENSSL_CONTEXT_REQUIRES_PRIVATE_KEY:
-            AI_INFO("conversation_volc SSL context requires private key");
-            break;
+    case LWS_CALLBACK_OPENSSL_CONTEXT_REQUIRES_PRIVATE_KEY:
+        AI_INFO("conversation_volc SSL context requires private key");
+        break;
 
-        case LWS_CALLBACK_CLIENT_CONFIRM_EXTENSION_SUPPORTED:
-            AI_INFO("conversation_volc Confirm extension supported");
-            break;
+    case LWS_CALLBACK_CLIENT_CONFIRM_EXTENSION_SUPPORTED:
+        AI_INFO("conversation_volc Confirm extension supported");
+        break;
 
-        case LWS_CALLBACK_WS_CLIENT_BIND_PROTOCOL:
-            AI_INFO("conversation_volc WS client bind protocol");
-            break;
+    case LWS_CALLBACK_WS_CLIENT_BIND_PROTOCOL:
+        AI_INFO("conversation_volc WS client bind protocol");
+        break;
 
-        case LWS_CALLBACK_CLIENT_RECEIVE_PONG:
-            AI_INFO("conversation_volc Received pong");
-            break;
+    case LWS_CALLBACK_CLIENT_RECEIVE_PONG:
+        AI_INFO("conversation_volc Received pong");
+        break;
 
-        default:
-            AI_INFO("conversation_volc Default reason %d \n", reason);
+    default:
+        AI_INFO("conversation_volc Default reason %d \n", reason);
             break;
     }
 
@@ -351,18 +364,31 @@ static int volc_conversation_send_json_message(volc_conversation_engine_t* engin
     const char* json_string = json_object_to_json_string(json_obj);
     size_t json_len = strlen(json_string);
 
-    if (json_len > 1024)
-        // AI_INFO("Sending: %d", json_len);
-        ;
-    else
-        AI_INFO("Sending: %s", json_string);
+    AI_INFO("Sending: %s", json_string);
 
+    // 检查缓冲区是否有足够空间
     if (ai_ring_buffer_is_full(&engine->send_buffer)) {
         AI_INFO("Send buffer full, clearing space");
         ai_ring_buffer_clear_arr(&engine->send_buffer, json_len);
     }
 
-    ai_ring_buffer_queue_arr(&engine->send_buffer, json_string, json_len);
+    // 添加消息分隔符，确保每个JSON消息都是独立的
+    // 在JSON消息后添加换行符作为分隔符
+    char* message_with_separator = malloc(json_len + 2); // +2 for \n and \0
+    if (!message_with_separator) {
+        AI_INFO("Failed to allocate memory for message separator");
+        return -ENOMEM;
+    }
+    
+    memcpy(message_with_separator, json_string, json_len);
+    message_with_separator[json_len] = '\n';  // 添加换行符作为分隔符
+    message_with_separator[json_len + 1] = '\0';
+    
+    // 将带分隔符的消息写入缓冲区
+    ai_ring_buffer_queue_arr(&engine->send_buffer, message_with_separator, json_len + 1);
+    free(message_with_separator);
+    
+    // 请求写入回调
     lws_callback_on_writable(engine->wsi);
 
     return 0;
@@ -521,8 +547,6 @@ static void volc_conversation_send_event(volc_conversation_engine_t* engine,
         return;
     }
 
-    // ✅ 学习ASR/TTS架构：在WebSocket线程中直接调用回调
-    // 回调函数 conversation_engine_event_cb 会负责异步队列处理
     conversation_engine_result_t engine_result = {
         .result = result,
         .len = len,
@@ -533,7 +557,6 @@ static void volc_conversation_send_event(volc_conversation_engine_t* engine,
     engine->event_callback(event, &engine_result, engine->event_cookie);
 }
 
-// Base64编码实现（简化版）
 static char* base64_encode(const unsigned char* data, size_t input_length)
 {
     static const char encoding_table[] = {
@@ -572,7 +595,6 @@ static char* base64_encode(const unsigned char* data, size_t input_length)
     return encoded_data;
 }
 
-// Base64解码实现（简化版）
 static unsigned char* base64_decode(const char* data, size_t input_length, size_t* output_length)
 {
     if (input_length % 4 != 0) return NULL;
@@ -581,12 +603,9 @@ static unsigned char* base64_decode(const char* data, size_t input_length, size_
     if (data[input_length - 1] == '=') (*output_length)--;
     if (data[input_length - 2] == '=') (*output_length)--;
 
-    // 简化实现，实际项目中应使用更完整的解码
     unsigned char* decoded_data = malloc(*output_length);
     if (!decoded_data) return NULL;
 
-    // 这里应该实现完整的base64解码逻辑
-    // 为简化起见，暂时使用占位实现
     memset(decoded_data, 0, *output_length);
 
     return decoded_data;
@@ -606,36 +625,29 @@ static int volc_conversation_init(void* engine, const conversation_engine_init_p
 
     AI_INFO("Initializing VolcEngine conversation");
 
-    // 复制配置
     memcpy(&volc_engine->config, param, sizeof(conversation_engine_init_params_t));
 
-    // 设置认证信息
     volc_engine->api_key = param->api_key ? strdup(param->api_key) : strdup(VOLC_API_KEY);
 
-    // 初始化发送缓冲区
     volc_engine->send_buffer_data = malloc(VOLC_BUFFER_MAX_SIZE);
     if (!volc_engine->send_buffer_data) {
         return -ENOMEM;
     }
     ai_ring_buffer_init(&volc_engine->send_buffer, volc_engine->send_buffer_data, VOLC_BUFFER_MAX_SIZE);
 
-    // 设置环境参数
     volc_engine->env.loop = param->loop;
     volc_engine->env.format = "format=s16le:sample_rate=16000:ch_layout=mono";
     volc_engine->env.force_format = 1;
 
     volc_engine->state = VOLC_STATE_DISCONNECTED;
 
-    // 初始化状态标志
     volc_engine->is_finished = false;
     volc_engine->is_closed = false;
     volc_engine->is_running = false;
 
-    // 初始化async queue相关
     volc_engine->uvasyncq_cb = param->cb;
     volc_engine->opaque = param->opaque;
 
-    // 创建UV循环线程
     int ret = volc_conversation_create_thread(volc_engine);
     if (ret < 0) {
         AI_INFO("Failed to create UV loop thread");
@@ -658,14 +670,11 @@ static int volc_conversation_uninit(void* engine)
 
     AI_INFO("Uninitializing VolcEngine conversation");
 
-    // 设置关闭和完成标志，立即停止所有操作
     volc_engine->is_finished = true;
     volc_engine->is_closed = true;
 
-    // 销毁UV循环线程
     volc_conversation_destroy_thread(volc_engine);
 
-    // 关闭连接（线程销毁时已处理，但为了安全起见保留）
     if (volc_engine->wsi) {
         lws_close_reason(volc_engine->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
         volc_engine->wsi = NULL;
@@ -676,7 +685,6 @@ static int volc_conversation_uninit(void* engine)
         volc_engine->lws_context = NULL;
     }
 
-    // 清理内存
     if (volc_engine->send_buffer_data) {
         free(volc_engine->send_buffer_data);
     }
@@ -718,11 +726,9 @@ static int volc_conversation_start(void* engine, const conversation_engine_audio
 
     AI_INFO("Starting VolcEngine conversation");
 
-    // 重置音频输入标志，开始新一轮对话
     volc_engine->is_finished = false;
     AI_INFO("Audio input enabled for new conversation round");
 
-    // 确保WebSocket连接可用 (复用已有连接或创建新连接)
     int ret = volc_conversation_connect_websocket(volc_engine);
     if (ret < 0) {
         AI_INFO("Failed to ensure WebSocket connection");
@@ -736,13 +742,11 @@ static int volc_conversation_connect_websocket(volc_conversation_engine_t* volc_
 {
     AI_INFO("Creating WebSocket connection in UV thread");
 
-    // ✅ 检查是否已有活跃连接
     if (volc_engine->lws_context && volc_engine->wsi) {
         AI_INFO("WebSocket connection already active, reusing existing connection");
         return 0;
     }
 
-    // ✅ 清理可能存在的旧连接
     if (volc_engine->lws_context) {
         AI_INFO("Cleaning up old WebSocket context before creating new one");
         lws_context_destroy(volc_engine->lws_context);
@@ -750,7 +754,6 @@ static int volc_conversation_connect_websocket(volc_conversation_engine_t* volc_
         volc_engine->wsi = NULL;
     }
 
-    // 创建WebSocket上下文
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof(info));
 
@@ -767,7 +770,6 @@ static int volc_conversation_connect_websocket(volc_conversation_engine_t* volc_
         return -1;
     }
 
-    // 构建连接信息
     struct lws_client_connect_info ccinfo;
     memset(&ccinfo, 0, sizeof(ccinfo));
 
@@ -780,7 +782,6 @@ static int volc_conversation_connect_websocket(volc_conversation_engine_t* volc_
     ccinfo.protocol = volc_conversation_protocols[0].name;
     ccinfo.ssl_connection = LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED | LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
 
-    // 发起连接
     volc_engine->wsi = lws_client_connect_via_info(&ccinfo);
     if (!volc_engine->wsi) {
         AI_INFO("Failed to initiate WebSocket connection");
@@ -803,18 +804,15 @@ static int volc_conversation_write_audio(void* engine, const char* data, int len
         return -EINVAL;
     }
 
-    // 如果音频输入已完成或连接已关闭，不再处理新的音频数据
     if (volc_engine->is_finished || volc_engine->is_closed) {
         return 0;
     }
 
-    // 检查连接状态 - 在session创建后和listening状态都可以发送音频
     if (volc_engine->state != VOLC_STATE_SESSION_CREATED &&
         volc_engine->state != VOLC_STATE_LISTENING) {
         return 0;
     }
 
-    // Base64编码音频数据
     char* audio_b64 = base64_encode((const unsigned char*)data, len);
     if (!audio_b64) {
         return -ENOMEM;
@@ -846,11 +844,10 @@ static int volc_conversation_finish(void* engine)
         return -EINVAL;
     }
 
-    // 设置音频输入完成标志（但保持连接以接收服务端响应）
     volc_engine->is_finished = true;
     volc_engine->state = VOLC_STATE_PROCESSING;
 
-    // 提交音频缓冲区 - 使用正确的协议格式
+    // 发送第一个消息：input_audio_buffer.commit
     json_object* commit_json = json_object_new_object();
     json_object_object_add(commit_json, "type", json_object_new_string("input_audio_buffer.commit"));
 
@@ -861,7 +858,7 @@ static int volc_conversation_finish(void* engine)
         return ret;
     }
 
-    // 请求响应 - 使用正确的协议格式
+    // 发送第二个消息：response.create
     json_object* json = json_object_new_object();
     json_object_object_add(json, "type", json_object_new_string("response.create"));
     json_object* response_json = json_object_new_object();
