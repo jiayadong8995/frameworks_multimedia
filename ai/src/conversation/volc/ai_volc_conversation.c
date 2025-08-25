@@ -366,14 +366,11 @@ static int volc_conversation_send_json_message(volc_conversation_engine_t* engin
 
     AI_INFO("Sending: %s", json_string);
 
-    // 检查缓冲区是否有足够空间
     if (ai_ring_buffer_is_full(&engine->send_buffer)) {
         AI_INFO("Send buffer full, clearing space");
         ai_ring_buffer_clear_arr(&engine->send_buffer, json_len);
     }
 
-    // 添加消息分隔符，确保每个JSON消息都是独立的
-    // 在JSON消息后添加换行符作为分隔符
     char* message_with_separator = malloc(json_len + 2); // +2 for \n and \0
     if (!message_with_separator) {
         AI_INFO("Failed to allocate memory for message separator");
@@ -381,10 +378,9 @@ static int volc_conversation_send_json_message(volc_conversation_engine_t* engin
     }
     
     memcpy(message_with_separator, json_string, json_len);
-    message_with_separator[json_len] = '\n';  // 添加换行符作为分隔符
+    message_with_separator[json_len] = '\n';
     message_with_separator[json_len + 1] = '\0';
-    
-    // 将带分隔符的消息写入缓冲区
+
     ai_ring_buffer_queue_arr(&engine->send_buffer, message_with_separator, json_len + 1);
     free(message_with_separator);
     
@@ -478,8 +474,7 @@ static int volc_conversation_process_server_message(volc_conversation_engine_t* 
         }
 
     } else if (strcmp(type, "response.done") == 0) {
-        // 检查响应状态：完成或取消
-        const char* status = "completed";  // 默认状态
+        const char* status = "completed";
         json_object* response_obj;
         if (json_object_object_get_ex(json, "response", &response_obj)) {
             json_object* status_obj;
@@ -488,15 +483,12 @@ static int volc_conversation_process_server_message(volc_conversation_engine_t* 
             }
         }
 
-        // 一轮对话完成或取消，重置状态
         engine->state = VOLC_STATE_SESSION_CREATED;
 
-        // 根据配置决定是否自动准备下一轮
         if (engine->config.auto_next_round) {
-            engine->is_finished = false;  // 自动重置音频输入标志，准备下一轮
+            engine->is_finished = false;
             AI_INFO("Auto next round enabled - ready for immediate input");
         } else {
-            // 保持is_finished=true，需要手动调用start来开始下一轮
             AI_INFO("Auto next round disabled - call start() for next round");
         }
 
@@ -553,7 +545,7 @@ static void volc_conversation_send_event(volc_conversation_engine_t* engine,
         .error_code = error_code
     };
 
-    AI_INFO("🎯 Sending event: event=%d, result_len=%d", event, len);
+    AI_INFO(" Sending event: event=%d, result_len=%d", event, len);
     engine->event_callback(event, &engine_result, engine->event_cookie);
 }
 
@@ -599,15 +591,47 @@ static unsigned char* base64_decode(const char* data, size_t input_length, size_
 {
     if (input_length % 4 != 0) return NULL;
 
-    *output_length = input_length / 4 * 3;
-    if (data[input_length - 1] == '=') (*output_length)--;
-    if (data[input_length - 2] == '=') (*output_length)--;
+    static const unsigned char decoding_table[256] = {
+        ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,  ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
+        ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11, ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
+        ['Q'] = 16, ['R'] = 17, ['S'] = 18, ['T'] = 19, ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23,
+        ['Y'] = 24, ['Z'] = 25,
+        ['a'] = 26, ['b'] = 27, ['c'] = 28, ['d'] = 29, ['e'] = 30, ['f'] = 31, ['g'] = 32, ['h'] = 33,
+        ['i'] = 34, ['j'] = 35, ['k'] = 36, ['l'] = 37, ['m'] = 38, ['n'] = 39, ['o'] = 40, ['p'] = 41,
+        ['q'] = 42, ['r'] = 43, ['s'] = 44, ['t'] = 45, ['u'] = 46, ['v'] = 47, ['w'] = 48, ['x'] = 49,
+        ['y'] = 50, ['z'] = 51,
+        ['0'] = 52, ['1'] = 53, ['2'] = 54, ['3'] = 55, ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59,
+        ['8'] = 60, ['9'] = 61, ['+'] = 62, ['/'] = 63,
+        ['='] = 0
+    };
 
-    unsigned char* decoded_data = malloc(*output_length);
+    size_t out_len = input_length / 4 * 3;
+    if (data[input_length - 1] == '=') out_len--;
+    if (data[input_length - 2] == '=') out_len--;
+
+    unsigned char* decoded_data = malloc(out_len);
     if (!decoded_data) return NULL;
 
-    memset(decoded_data, 0, *output_length);
+    size_t i = 0, j = 0;
+    while (i < input_length) {
+        unsigned char sextet_a = decoding_table[(unsigned char)data[i++]];
+        unsigned char sextet_b = decoding_table[(unsigned char)data[i++]];
+        unsigned char sextet_c = decoding_table[(unsigned char)data[i++]];
+        unsigned char sextet_d = decoding_table[(unsigned char)data[i++]];
 
+        if (sextet_a == 0x80 || sextet_b == 0x80 || sextet_c == 0x80 || sextet_d == 0x80) {
+            free(decoded_data);
+            return NULL;
+        }
+
+        uint32_t triple = (sextet_a << 18) | (sextet_b << 12) | (sextet_c << 6) | sextet_d;
+
+        if (j < out_len) decoded_data[j++] = (triple >> 16) & 0xFF;
+        if (j < out_len) decoded_data[j++] = (triple >> 8) & 0xFF;
+        if (j < out_len) decoded_data[j++] = triple & 0xFF;
+    }
+
+    *output_length = out_len;
     return decoded_data;
 }
 
@@ -818,7 +842,6 @@ static int volc_conversation_write_audio(void* engine, const char* data, int len
         return -ENOMEM;
     }
 
-    // 构建JSON消息
     json_object* json = json_object_new_object();
     json_object_object_add(json, "type", json_object_new_string("input_audio_buffer.append"));
     json_object_object_add(json, "audio", json_object_new_string(audio_b64));
@@ -849,7 +872,8 @@ static int volc_conversation_finish(void* engine)
 
     // 发送第一个消息：input_audio_buffer.commit
     json_object* commit_json = json_object_new_object();
-    json_object_object_add(commit_json, "type", json_object_new_string("input_audio_buffer.commit"));
+    json_object_object_add(commit_json, "type",\
+                     json_object_new_string("input_audio_buffer.commit"));
 
     int ret = volc_conversation_send_json_message(volc_engine, commit_json);
     json_object_put(commit_json);
@@ -858,7 +882,6 @@ static int volc_conversation_finish(void* engine)
         return ret;
     }
 
-    // 发送第二个消息：response.create
     json_object* json = json_object_new_object();
     json_object_object_add(json, "type", json_object_new_string("response.create"));
     json_object* response_json = json_object_new_object();
@@ -924,7 +947,8 @@ static void* volc_conversation_uvloop_thread(void* arg)
     if (engine->uvasyncq_cb) {
         engine->asyncq = (uv_async_queue_t*)malloc(sizeof(uv_async_queue_t));
         engine->asyncq->data = engine->opaque;
-        ret = uv_async_queue_init(&engine->loop, engine->asyncq, engine->uvasyncq_cb);
+        ret = uv_async_queue_init(&engine->loop, engine->asyncq, \
+                                engine->uvasyncq_cb);
         if (ret < 0)
             goto out;
         AI_INFO("conversation_asyncq_init:%p", engine->asyncq);
@@ -935,10 +959,9 @@ static void* volc_conversation_uvloop_thread(void* arg)
     while (uv_loop_alive(&engine->loop) && !engine->is_closed) {
         ret = uv_run(&engine->loop, UV_RUN_NOWAIT);
         if (ret == 0 && !engine->is_closed) {
-            break; // 正常退出
+            break;
         }
 
-        // Service WebSocket events - 只要连接未关闭就继续服务
         if (!engine->is_closed && engine->lws_context) {
             ret = lws_service(engine->lws_context, -1);
             if (ret < 0) {
@@ -1008,7 +1031,8 @@ static int volc_conversation_create_thread(volc_conversation_engine_t* engine)
     pthread_attr_setschedparam(&attr, &param);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    ret = pthread_create(&engine->thread, &attr, volc_conversation_uvloop_thread, engine);
+    ret = pthread_create(&engine->thread, &attr, \
+                    volc_conversation_uvloop_thread, engine);
     if (ret != 0) {
         AI_INFO("pthread_create failed");
         sem_destroy(&engine->sem);

@@ -22,7 +22,6 @@ include $(APPDIR)/Make.defs
 
 MODULE  = y
 CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/multimedia/ai/utils
-CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/multimedia/ai/fonts
 CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/multimedia/ai/src/asr/plugin
 CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/multimedia/ai/src/tts/plugin
 CFLAGS += ${INCDIR_PREFIX}$(APPDIR)/frameworks/multimedia/ai/src/conversation/plugin
@@ -42,27 +41,26 @@ ifneq ($(CONFIG_AI_TOOL),)
 endif
 
 ifneq ($(CONFIG_AI_ASR_GUI),)
-  MAINSRC   += ai_asr_gui.c
+  MAINSRC   += gui/ai_asr_gui.c
   PROGNAME  += ai_asr_gui
   PRIORITY  += $(CONFIG_AI_ASR_GUI_PRIORITY)
   STACKSIZE += $(CONFIG_AI_ASR_GUI_STACKSIZE)
-  CSRCS += $(wildcard fonts/*.c)
+  CSRCS += res/fonts/lv_font_siyuan_16.c
+  CSRCS += res/icons/mic.c
 endif
 
 ifneq ($(CONFIG_RTC_CONVERSATION_GUI),)
-  MAINSRC   += rtc_conversation_gui.c
+  MAINSRC   += gui/rtc_conversation_gui.c
   PROGNAME  += rtc_conversation_gui
   PRIORITY  += $(CONFIG_RTC_CONVERSATION_GUI_PRIORITY)
   STACKSIZE += $(CONFIG_RTC_CONVERSATION_GUI_STACKSIZE)
-  CSRCS += $(wildcard fonts/*.c)
 endif
 
 ifneq ($(CONFIG_AI_CONVERSATION_GUI),)
-  MAINSRC   += ai_conversation_gui.c
+  MAINSRC   += gui/ai_conversation_gui.c
   PROGNAME  += ai_conversation_gui
   PRIORITY  += $(CONFIG_AI_CONVERSATION_GUI_PRIORITY)
   STACKSIZE += $(CONFIG_AI_CONVERSATION_GUI_STACKSIZE)
-  CSRCS += $(wildcard fonts/*.c)
 endif
 
 ifneq ($(CONFIG_AI_MODULE),)
