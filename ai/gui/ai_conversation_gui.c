@@ -186,6 +186,7 @@ static void ui_create(conver_gui_t* arg)
                                  lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_color(ai_gui->ui.ui_components.result_textarea,\
                                 lv_color_black(), LV_PART_MAIN);
+    lv_obj_clear_flag(ai_gui->ui.ui_components.result_textarea, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_text_color(ai_gui->ui.ui_components.result_textarea, \
                             lv_color_white(), LV_PART_MAIN);
     lv_textarea_set_text(ai_gui->ui.ui_components.result_textarea, "我在听，请你按下按键说");

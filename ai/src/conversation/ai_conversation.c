@@ -24,6 +24,7 @@
 
 #include <errno.h>
 #include <media_api.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -177,7 +178,7 @@ static conversation_engine_plugin_t* conversation_get_plugin(conversation_engine
         case conversation_engine_type_volc:
             return &volc_conversation_engine_plugin;
         default:
-            AI_INFO("Unsupported conversation engine type: %d", engine_type);
+            AI_ERR("Unsupported conversation engine type: %d", engine_type);
             return NULL;
     }
 }
@@ -191,7 +192,7 @@ static void conversation_async_cb(uv_async_queue_t* asyncq, void* data)
     message_t* message = (message_t*)data;
 
     if (!message || !message->message_handler) {
-        AI_INFO("Invalid message in conversation async callback");
+        AI_ERR("Invalid message in conversation async callback");
         return;
     }
 
@@ -214,7 +215,7 @@ static void conversation_engine_event_cb(conversation_engine_event_t event,
     conversation_context_t* ctx = (conversation_context_t*)cookie;
 
     if (!ctx) {
-        AI_INFO("Invalid context in engine event callback");
+        AI_ERR("Invalid context in engine event callback");
         return;
     }
 
@@ -222,12 +223,17 @@ static void conversation_engine_event_cb(conversation_engine_event_t event,
     switch (event) {
         case conversation_engine_event_start:
             user_event = conversation_event_start;
+            AI_INFO("jiayadong::conversation_engine_event_start");
             break;
         case conversation_engine_event_stop:
             user_event = conversation_event_stop;
+            AI_INFO("jiayadong::conversation_engine_event_stop");
             break;
         case conversation_engine_event_complete:
             user_event = conversation_event_complete;
+            AI_INFO("jiayadong::conversation_engine_event_complete");
+            media_uv_player_stop(ctx->player_handle, NULL, NULL);
+            // media_uv_recorder_stop(ctx->recorder_handle, NULL, NULL);
             break;
         case conversation_engine_event_audio:
             user_event = conversation_event_response_audio;
@@ -237,6 +243,7 @@ static void conversation_engine_event_cb(conversation_engine_event_t event,
             break;
         case conversation_engine_event_text:
             user_event = conversation_event_response_text;
+            AI_INFO("jiayadong::conversation_engine_event_text");
             break;
         case conversation_engine_event_input_text:
             user_event = conversation_event_input_text;
@@ -251,7 +258,7 @@ static void conversation_engine_event_cb(conversation_engine_event_t event,
 
     message_data_cb_t* cb_data = calloc(1, sizeof(message_data_cb_t));
     if (!cb_data) {
-        AI_INFO("Failed to allocate callback message data");
+        AI_ERR("Failed to allocate callback message data");
         return;
     }
 
@@ -289,7 +296,7 @@ static void conversation_engine_event_cb(conversation_engine_event_t event,
 
     message_t* message = calloc(1, sizeof(message_t));
     if (!message) {
-        AI_INFO("Failed to allocate callback message");
+        AI_ERR("Failed to allocate callback message");
         free(cb_data);
         return;
     }
@@ -352,6 +359,11 @@ static int conversation_message_start_handler(void* message_data)
         if (ret < 0)
             goto failed;
     } else {
+        // ret = media_uv_recorder_prepare(ctx->player_handle, NULL, ctx->format,
+        // media_recorder_prepare_connect_cb, NULL, NULL);
+        // if (ret < 0){
+        //     AI_ERR("jiayadong::media_uv_recorder_prepare failed");
+        // }
         AI_INFO("Recorder already initialized, reusing existing recorder");
     }
 
@@ -360,7 +372,12 @@ static int conversation_message_start_handler(void* message_data)
         if (ret < 0)
             goto failed;
     } else {
-        AI_INFO("Player already initialized, reusing existing player");
+        ret = media_uv_player_prepare(ctx->player_handle, NULL, ctx->format,
+        media_player_prepare_connect_cb, NULL, NULL);
+        if (ret < 0){
+            AI_ERR("jiayadong::media_uv_recorder_prepare failed");
+        }
+        AI_INFO("media player prepared");
     }
 
     if (ctx->plugin && ctx->plugin->start && ctx->engine) {
@@ -395,7 +412,7 @@ static int conversation_message_start_handler(void* message_data)
 
     return 0;
 failed:
-    AI_INFO("ai_conversation_start_l failed");
+    AI_ERR("ai_conversation_start_l failed");
     if (ctx->recorder_handle) {
         media_uv_recorder_close(ctx->recorder_handle, media_recorder_close_cb);
         ctx->recorder_handle = NULL;
@@ -574,7 +591,7 @@ static void media_recorder_prepare_connect_cb(void* cookie, int ret, void* obj)
     conversation_context_t* ctx = cookie;
 
     if (ret < 0) {
-        AI_INFO("conversation recorder prepare connect cb error:%d\n", ret);
+        AI_ERR("conversation recorder prepare connect cb error:%d\n", ret);
         return;
     }
 
@@ -589,7 +606,7 @@ static void media_recorder_open_cb(void* cookie, int ret)
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation recorder open cb error:%d", ret);
+        AI_ERR("conversation recorder open cb error:%d", ret);
     }
     AI_INFO("conversation recorder open cb:%d", ret);
 }
@@ -600,7 +617,7 @@ static void media_recorder_start_cb(void* cookie, int ret)
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation recorder start cb error:%d", ret);
+        AI_ERR("conversation recorder start cb error:%d", ret);
     }
     AI_INFO("conversation recorder start cb:%d", ret);
 }
@@ -616,7 +633,7 @@ static void media_recorder_event_callback(void* cookie, int event, int ret, cons
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation recorder event error:%d", ret);
+        AI_ERR("conversation recorder event error:%d", ret);
     }
 
     switch (event) {
@@ -650,7 +667,7 @@ static void media_player_prepare_connect_cb(void* cookie, int ret, void* obj)
     conversation_context_t* ctx = cookie;
 
     if (ret < 0) {
-        AI_INFO("conversation player prepare connect cb error:%d\n", ret);
+        AI_ERR("conversation player prepare connect cb error:%d\n", ret);
         return;
     }
 
@@ -664,7 +681,7 @@ static void media_player_open_cb(void* cookie, int ret)
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation player open cb error:%d", ret);
+        AI_ERR("conversation player open cb error:%d", ret);
     }
     AI_INFO("conversation player open cb:%d", ret);
 }
@@ -675,7 +692,7 @@ static void media_player_start_cb(void* cookie, int ret)
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation player start cb error:%d", ret);
+        AI_ERR("conversation player start cb error:%d", ret);
     }
     AI_INFO("conversation player start cb:%d", ret);
 }
@@ -691,7 +708,7 @@ static void media_player_event_callback(void* cookie, int event, int ret, const 
     UNUSED(ctx);
 
     if (ret < 0) {
-        AI_INFO("conversation player event error:%d", ret);
+        AI_ERR("conversation player ret error:%d", ret);
     }
 
     switch (event) {
@@ -706,22 +723,34 @@ static void media_player_event_callback(void* cookie, int event, int ret, const 
     case MEDIA_EVENT_STOPPED:
         break;
     case MEDIA_EVENT_COMPLETED:
-        break;
-    case MEDIA_EVENT_SEEKED:
+        if (ctx) {
+            ctx->player_pipe = NULL;
+            ctx->write_req.data = NULL;
+        }
         break;
     default:
-        return;
+        break;
     }
 
-    AI_INFO("conversation player event callback event:%d ret:%d", event, ret);
+    AI_INFO("conversation player evert callback: [event] :%d", event);
+
 }
 
 static void write_audio_data_cb(uv_write_t* req, int status)
 {
-    conversation_context_t* ctx = (conversation_context_t*)req->data;
+    conversation_context_t* ctx = req ? (conversation_context_t*)req->data : NULL;
+
+    if (!ctx) {
+        return;
+    }
+
+    if (ctx->is_closed || ctx->state == CONVERSATION_STATE_CLOSE || !ctx->player_pipe) {
+        ctx->write_req.data = NULL;
+        return;
+    }
 
     if (status < 0) {
-        AI_INFO("write audio data error:%d", status);
+        AI_ERR("write_audio_data_cb status error:%d", status);
         ctx->write_req.data = NULL;
         return;
     }
@@ -754,7 +783,7 @@ static int ai_conversation_init_recorder(conversation_context_t* ctx)
     ctx->focus_handle = media_focus_request(&init_suggestion, MEDIA_SCENARIO_TTS,
                                           ai_conversation_focus_callback, ctx);
     if (init_suggestion != MEDIA_FOCUS_PLAY && ctx->focus_handle) {
-        AI_INFO("conversation recorder focus failed");
+        AI_ERR("conversation recorder focus failed");
         media_focus_abandon(ctx->focus_handle);
         ctx->focus_handle = NULL;
         goto failed;
@@ -762,13 +791,13 @@ static int ai_conversation_init_recorder(conversation_context_t* ctx)
 
     handle = media_uv_recorder_open(ctx->loop, stream, media_recorder_open_cb, ctx);
     if (handle == NULL) {
-        AI_INFO("conversation recorder open failed");
+        AI_ERR("conversation recorder open failed");
         goto failed;
     }
 
     int ret = media_uv_recorder_listen(handle, media_recorder_event_callback);
     if (ret < 0) {
-        AI_INFO("conversation recorder listen failed");
+        AI_ERR("conversation recorder listen failed");
         media_uv_recorder_close(handle, media_recorder_close_cb);
         goto failed;
     }
@@ -776,7 +805,7 @@ static int ai_conversation_init_recorder(conversation_context_t* ctx)
     ret = media_uv_recorder_prepare(handle, NULL, format,
         media_recorder_prepare_connect_cb, NULL, NULL);
     if (ret < 0) {
-        AI_INFO("conversation recorder prepare failed");
+        AI_ERR("conversation recorder prepare failed");
         media_uv_recorder_close(handle, media_recorder_close_cb);
         goto failed;
     }
@@ -801,13 +830,13 @@ static int ai_conversation_init_player(conversation_context_t* ctx)
 
     handle = media_uv_player_open(ctx->loop, stream, media_player_open_cb, ctx);
     if (handle == NULL) {
-        AI_INFO("conversation player open failed");
+        AI_ERR("conversation player open failed");
         goto failed;
     }
 
     int ret = media_uv_player_listen(handle, media_player_event_callback);
     if (ret < 0) {
-        AI_INFO("conversation player listen failed");
+        AI_ERR("conversation player listen failed");
         media_uv_player_close(handle, 0, media_player_close_cb);
         goto failed;
     }
@@ -815,7 +844,7 @@ static int ai_conversation_init_player(conversation_context_t* ctx)
     ret = media_uv_player_prepare(handle, NULL, format,
         media_player_prepare_connect_cb, NULL, NULL);
     if (ret < 0) {
-        AI_INFO("conversation player prepare failed");
+        AI_ERR("conversation player prepare failed");
         media_uv_player_close(handle, 0, media_player_close_cb);
         goto failed;
     }
@@ -824,14 +853,14 @@ static int ai_conversation_init_player(conversation_context_t* ctx)
 
     ctx->frame_buf = malloc(4096);
     if (!ctx->frame_buf) {
-        AI_INFO("Failed to allocate audio frame buffer");
+        AI_ERR("Failed to allocate audio frame buffer");
         media_uv_player_close(handle, 0, media_player_close_cb);
         goto failed;
     }
 
     char* buffer_data = malloc(CONVERSATION_BUFFER_MAX_SIZE);
     if (!buffer_data) {
-        AI_INFO("Failed to allocate audio buffer");
+        AI_ERR("Failed to allocate audio buffer");
         free(ctx->frame_buf);
         media_uv_player_close(handle, 0, media_player_close_cb);
         goto failed;
@@ -861,7 +890,7 @@ static int ai_conversation_map_params(conversation_context_t* ctx, const convers
     out_param->opaque = ctx;
 
     if (!out_param->loop) {
-        AI_INFO("UV loop is required for conversation engine");
+        AI_ERR("UV loop is required for conversation engine");
         return -EINVAL;
     }
 
@@ -875,7 +904,7 @@ static int ai_conversation_play_audio(conversation_context_t* ctx, const void* d
     }
 
     if (ai_ring_buffer_is_full(&ctx->buffer)) {
-        AI_INFO("Audio buffer full, dropping data");
+        AI_ERR("Audio buffer full, dropping data");
         return -ENOSPC;
     }
 
@@ -905,19 +934,19 @@ conversation_handle_t ai_conversation_create_engine(const conversation_init_para
     conversation_engine_plugin_t* plugin;
 
     if (!param) {
-        AI_INFO("Invalid parameters for conversation engine creation");
+        AI_ERR("Invalid parameters for conversation engine creation");
         return NULL;
     }
 
     plugin = conversation_get_plugin(param->engine_type);
     if (!plugin) {
-        AI_INFO("Failed to get conversation plugin");
+        AI_ERR("Failed to get conversation plugin");
         return NULL;
     }
 
     ctx = calloc(1, sizeof(conversation_context_t));
     if (!ctx) {
-        AI_INFO("Failed to allocate conversation context");
+        AI_ERR("Failed to allocate conversation context");
         return NULL;
     }
 
@@ -925,13 +954,13 @@ conversation_handle_t ai_conversation_create_engine(const conversation_init_para
 
     ctx->asyncq = calloc(1, sizeof(uv_async_queue_t));
     if (!ctx->asyncq) {
-        AI_INFO("Failed to allocate async queue");
+        AI_ERR("Failed to allocate async queue");
         free(ctx);
         return NULL;
     }
 
     if (uv_async_queue_init(ctx->loop, ctx->asyncq, conversation_async_cb) < 0) {
-        AI_INFO("Failed to initialize async queue");
+        AI_ERR("Failed to initialize async queue");
         free(ctx->asyncq);
         free(ctx);
         return NULL;
@@ -939,7 +968,7 @@ conversation_handle_t ai_conversation_create_engine(const conversation_init_para
 
     ctx->user_asyncq.data = ctx;
     if (uv_async_queue_init(ctx->loop, &ctx->user_asyncq, conversation_async_cb) < 0) {
-        AI_INFO("Failed to initialize user async queue");
+        AI_ERR("Failed to initialize user async queue");
         uv_close((uv_handle_t*)ctx->asyncq, NULL);
         free(ctx->asyncq);
         free(ctx);
@@ -947,7 +976,7 @@ conversation_handle_t ai_conversation_create_engine(const conversation_init_para
     }
 
     if (ai_conversation_map_params(ctx, param, &ctx->voice_param) < 0) {
-        AI_INFO("Failed to map conversation parameters");
+        AI_ERR("Failed to map conversation parameters");
         free(ctx->asyncq);
         free(ctx);
         return NULL;
@@ -956,7 +985,7 @@ conversation_handle_t ai_conversation_create_engine(const conversation_init_para
     ctx->plugin = plugin;
     ctx->engine = conversation_plugin_init(plugin, &ctx->voice_param);
     if (!ctx->engine) {
-        AI_INFO("Failed to initialize conversation plugin");
+        AI_ERR("Failed to initialize conversation plugin");
         free(ctx->asyncq);
         free(ctx);
         return NULL;
